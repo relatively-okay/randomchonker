@@ -1,6 +1,6 @@
 # randomchonker
 
-![logo](assets/logo.png)
+<img src="assets/logo.png" width="298" alt="logo">
 
 A single-file fullscreen slideshow of fat cats from [r/chonkers](https://www.reddit.com/r/chonkers/). Meant to run on a dedicated display with nothing but a browser.
 
