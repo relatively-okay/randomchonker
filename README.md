@@ -4,10 +4,6 @@
 
 A single-file fullscreen slideshow of fat cats from [r/chonkers](https://www.reddit.com/r/chonkers/). Meant to run on a dedicated display with nothing but a browser.
 
-![QR code](assets/qrcode.png)
-
-*Scan to open the repo on your phone.*
-
 ## Usage
 
 Open `index.html` in any browser — no server needed. Press `F` to go fullscreen.
@@ -29,6 +25,10 @@ Open `index.html` in any browser — no server needed. Press `F` to go fullscree
 - **Pagination** — fetches more posts from Reddit as it runs low on unseen ones
 - **QR code overlay** — pause shows a QR code linking to the original Reddit post, plus a "next photo" button
 - **No dependencies, no build step** — just one HTML file
+
+![QR code](assets/qrcode.png)
+
+*Scan to open the repo on your phone.*
 
 ## Configuration
 
