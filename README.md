@@ -42,10 +42,6 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/frends-dani/randomchon
 
 *Click (or tap) anywhere on the photo to pause and show a QR code linking to the original Reddit post of the current chonker.*
 
-## Branch policy
-
-`main` is the release branch — everything on it should be fully working and usable. All changes should go through a pull request with passing tests before merging.
-
 ## Configuration
 
 At the top of the `<script>` block:
@@ -55,3 +51,7 @@ const DURATION  = 120_000; // ms per photo (default: 2 minutes)
 const MAX_SEEN  = 400;     // how many post IDs to remember across sessions
 const SUBREDDIT = 'chonkers';
 ```
+
+## Branch policy
+
+`main` is the release branch — everything on it should be fully working and usable. All changes should go through a pull request with passing tests before merging.
