@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chonkers</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    cursor: none;
+  }
+
+  .frame {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 1s ease-in-out;
+  }
+  .frame.visible { opacity: 1; }
+
+  .frame img {
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* ── QR overlay ─────────────────────────────────────────────── */
+  #qr-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+  }
+  #qr-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #qr-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.9rem;
+    background: rgba(0, 0, 0, 0.82);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 1.75rem 2rem;
+    max-width: min(320px, 90vw);
+  }
+
+  #qr-img {
+    width: 210px;
+    height: 210px;
+    border-radius: 10px;
+    display: block;
+  }
+
+  #qr-title {
+    color: rgba(255,255,255,0.85);
+    font: 14px/1.45 system-ui, sans-serif;
+    text-align: center;
+    max-width: 210px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  #qr-hint {
+    color: rgba(255,255,255,0.3);
+    font: 11px/1 system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  #qr-next {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    color: rgba(255,255,255,0.6);
+    font: 12px/1 system-ui, sans-serif;
+    letter-spacing: 0.06em;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  #qr-next:hover {
+    border-color: rgba(255,255,255,0.5);
+    color: rgba(255,255,255,0.9);
+  }
+
+  #status {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.35);
+    font: 13px/1 system-ui, sans-serif;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s;
+    z-index: 5;
+  }
+  #status.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="frame-a" class="frame"><img alt=""></div>
+<div id="frame-b" class="frame"><img alt=""></div>
+
+<div id="qr-overlay">
+  <div id="qr-card">
+    <img id="qr-img" alt="QR code to Reddit post">
+    <p id="qr-title"></p>
+    <p id="qr-hint">tap anywhere to continue</p>
+    <button id="qr-next">next photo →</button>
+  </div>
+</div>
+
+<div id="status"></div>
+
+<script>
+  // ── Config ────────────────────────────────────────────────────
+  const SEEN_KEY    = 'chonker_seen_v1';
+  const MAX_SEEN    = 400;    // how many post IDs to remember
+  const DURATION    = 120_000; // ms per photo
+  const FADE_MS     = 1_000;  // must match CSS transition duration
+  const SUBREDDIT   = 'chonkers';
+
+  // ── State ─────────────────────────────────────────────────────
+  let posts        = [];   // { id, url, title }[]
+  let afterToken   = null; // Reddit pagination cursor (false = no more pages)
+  let fetching     = false;
+  let current      = 'a';
+  let cycleTimer   = null;
+  let inCycle      = false;
+  let paused       = false;
+  let currentPost  = null; // post currently on screen
+
+  // ── Seen-IDs in localStorage ──────────────────────────────────
+  function getSeen() {
+    try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); }
+    catch { return new Set(); }
+  }
+
+  function addSeen(id) {
+    try {
+      let arr = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
+      arr.push(id);
+      if (arr.length > MAX_SEEN) arr = arr.slice(-MAX_SEEN);
+      localStorage.setItem(SEEN_KEY, JSON.stringify(arr));
+    } catch {}
+  }
+
+  // ── Reddit fetching ───────────────────────────────────────────
+  function extractImageUrl(d) {
+    if (d.preview?.images?.[0]?.source?.url) return d.preview.images[0].source.url;
+    if (/\.(jpe?g|png|gif|webp)(\?|$)/i.test(d.url)) return d.url;
+    return null;
+  }
+
+  async function fetchMore() {
+    if (fetching || afterToken === false) return;
+    fetching = true;
+    try {
+      let url = `https://www.reddit.com/r/${SUBREDDIT}/hot.json?limit=100&raw_json=1`;
+      if (afterToken) url += '&after=' + afterToken;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+
+      const fresh = json.data.children
+        .filter(c => {
+          const d = c.data;
+          return !d.is_video && !d.is_gallery &&
+            (d.post_hint === 'image' || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(d.url));
+        })
+        .map(c => ({ id: c.data.id, url: extractImageUrl(c.data), title: c.data.title, score: c.data.score }))
+        .filter(p => p.url);
+
+      posts.push(...fresh);
+      afterToken = json.data.after ?? false;
+    } catch (err) {
+      console.warn('Reddit fetch failed:', err);
+    }
+    fetching = false;
+  }
+
+  function pickPost() {
+    const seen = getSeen();
+    const unseen = posts.filter(p => !seen.has(p.id));
+
+    if (unseen.length > 0) {
+      const weights = unseen.map(p => Math.max(1, p.score));
+      const total   = weights.reduce((a, b) => a + b, 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < unseen.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return unseen[i];
+      }
+      return unseen[unseen.length - 1];
+    }
+
+    if (afterToken !== false) return null; // caller should fetch more first
+
+    // Fully wrapped around — reset memory and re-run with full pool
+    localStorage.removeItem(SEEN_KEY);
+    setStatus('looped around — starting fresh');
+    return pickPost();
+  }
+
+  // ── Display helpers ───────────────────────────────────────────
+  function loadImage(imgEl, url) {
+    return new Promise((resolve, reject) => {
+      if (imgEl.src === url) { resolve(); return; }
+      imgEl.onload  = resolve;
+      imgEl.onerror = reject;
+      imgEl.src = url;
+    });
+  }
+
+  let statusTimer = null;
+  function setStatus(msg) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  // ── QR overlay ────────────────────────────────────────────────
+  function showQR() {
+    if (!currentPost) return;
+    const postUrl = `https://www.reddit.com/r/${SUBREDDIT}/comments/${currentPost.id}/`;
+    const qrSrc   = 'https://api.qrserver.com/v1/create-qr-code/'
+      + `?size=210x210&color=ffffff&bgcolor=000000&format=png&data=${encodeURIComponent(postUrl)}`;
+    document.getElementById('qr-img').src = qrSrc;
+    document.getElementById('qr-title').textContent = currentPost.title;
+    document.getElementById('qr-overlay').classList.add('visible');
+    document.body.style.cursor = 'default';
+  }
+
+  function hideQR() {
+    document.getElementById('qr-overlay').classList.remove('visible');
+    document.body.style.cursor = 'none';
+  }
+
+  // ── Pause / resume ────────────────────────────────────────────
+  function pause() {
+    paused = true;
+    clearTimeout(cycleTimer);
+    showQR();
+  }
+
+  function resume() {
+    paused = false;
+    hideQR();
+    schedule(DURATION);
+  }
+
+  // ── Main cycle ────────────────────────────────────────────────
+  function schedule(delay) {
+    clearTimeout(cycleTimer);
+    if (!paused) cycleTimer = setTimeout(runCycle, delay);
+  }
+
+  async function runCycle() {
+    if (inCycle) return;
+    inCycle = true;
+
+    try {
+      if (posts.length === 0) await fetchMore();
+      if (posts.length === 0) { inCycle = false; schedule(3000); return; }
+
+      let post = pickPost();
+      if (!post) {
+        await fetchMore();
+        post = pickPost();
+      }
+      if (!post) { inCycle = false; schedule(3000); return; }
+
+      addSeen(post.id);
+
+      const nextId = current === 'a' ? 'b' : 'a';
+      const nxtEl  = document.getElementById('frame-' + nextId);
+      const curEl  = document.getElementById('frame-' + current);
+      const img    = nxtEl.querySelector('img');
+
+      try {
+        await loadImage(img, post.url);
+      } catch {
+        inCycle = false;
+        schedule(0); // broken image — skip immediately
+        return;
+      }
+
+      // crossfade
+      nxtEl.classList.add('visible');
+      curEl.classList.remove('visible');
+      current = nextId;
+      currentPost = post;
+
+      // prefetch next batch when running low
+      const unseenLeft = posts.filter(p => !getSeen().has(p.id)).length;
+      if (unseenLeft < 15 && afterToken !== false) fetchMore();
+
+    } catch (err) {
+      console.error('Cycle error:', err);
+    }
+
+    inCycle = false;
+    schedule(DURATION);
+  }
+
+  // ── Input ─────────────────────────────────────────────────────
+  // "next photo" button inside QR card — skip without closing via backdrop click
+  document.getElementById('qr-next').addEventListener('click', e => {
+    e.stopPropagation(); // don't also trigger the backdrop resume
+    paused = false;
+    hideQR();
+    schedule(0);
+  });
+
+  // Click / tap backdrop: toggle pause
+  document.addEventListener('click', () => {
+    paused ? resume() : pause();
+  });
+
+  // Space / arrows: skip to next (resumes if paused)
+  document.addEventListener('keydown', e => {
+    if ([' ', 'ArrowRight', 'ArrowDown', 'Enter'].includes(e.key)) {
+      e.preventDefault();
+      paused = false;
+      hideQR();
+      schedule(0);
+    }
+    if (e.key === 'f' || e.key === 'F') {
+      document.fullscreenElement
+        ? document.exitFullscreen()
+        : document.documentElement.requestFullscreen().catch(() => {});
+    }
+  });
+
+  // ── Boot ──────────────────────────────────────────────────────
+  fetchMore().then(() => runCycle());
+</script>
+</body>
+</html>
