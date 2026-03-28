@@ -1,5 +1,7 @@
 # randomchonker
 
+[![Tests](https://github.com/relatively-okay/randomchonker/actions/workflows/tests.yml/badge.svg)](https://github.com/relatively-okay/randomchonker/actions/workflows/tests.yml)
+
 <p align="center"><img src="assets/logo.png" width="298" alt="logo"></p>
 
 A single-file fullscreen slideshow of fat cats from [r/chonkers](https://www.reddit.com/r/chonkers/). Meant to run on a dedicated display with nothing but a browser.
