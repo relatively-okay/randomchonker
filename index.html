@@ -248,8 +248,9 @@
   function loadImage(imgEl, url) {
     return new Promise((resolve, reject) => {
       if (imgEl.src === url) { resolve(); return; }
-      imgEl.onload  = resolve;
-      imgEl.onerror = reject;
+      const timeout = setTimeout(() => reject(new Error('timeout')), 10_000);
+      imgEl.onload  = () => { clearTimeout(timeout); resolve(); };
+      imgEl.onerror = () => { clearTimeout(timeout); reject(); };
       imgEl.src = url;
     });
   }
