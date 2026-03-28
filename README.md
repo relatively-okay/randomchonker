@@ -8,6 +8,18 @@ A single-file fullscreen slideshow of fat cats from [r/chonkers](https://www.red
 
 Open `index.html` in any browser — no server needed. Press `F` to go fullscreen.
 
+Or just paste one of these into a terminal and go:
+
+**bash / fish (Linux/macOS)**
+```bash
+curl -sL https://raw.githubusercontent.com/frends-dani/randomchonker/main/index.html -o $HOME/chonkers.html && firefox $HOME/chonkers.html 2>/dev/null || chromium $HOME/chonkers.html 2>/dev/null || google-chrome $HOME/chonkers.html 2>/dev/null || open $HOME/chonkers.html 2>/dev/null
+```
+
+**PowerShell (Windows)**
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/frends-dani/randomchonker/main/index.html" -OutFile "$env:TEMP\chonkers.html"; Start-Process "$env:TEMP\chonkers.html"
+```
+
 ## Controls
 
 | Input | Action |
